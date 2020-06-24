@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from blazeface import BlazeFace
 import math
+import dlib
 
 DATA_FOLDER = '../input/deepfake-detection-challenge'
 TRAIN_SAMPLE_FOLDER = 'train_sample_videos'
 TEST_FOLDER = 'test_videos'
+PREDICTOR = dlib.shape_predictor('../input/shape_predictor_68_face_landmarks.dat')
 
 def get_frame_faces(video_path, net):
     '''
@@ -34,7 +36,8 @@ def get_frame_faces(video_path, net):
     frame, cropped_dims = crop_to_square(frame, 128)
     cv.waitKey(0)
     detections = net.predict_on_image(frame)
-    faces_endpoints = plot_detections(frame, detections)
+    faces_endpoints = plot_detections(frame, detections) # will return an array of face endpoints
+    # perform some simple arithmetic to draw the face box on the original image with higher resolution
     plot_original(orig_frame, scale_value, faces_endpoints, cropped_dims)
 
 def plot_original(img, scale_value, faces_endpoints, cropped_dims):
@@ -47,8 +50,6 @@ def plot_original(img, scale_value, faces_endpoints, cropped_dims):
                      128x128 image
     cropped_dims - (y, x) the amount taken from the top and left, respectively
                     when it was cropped to 128x128
-    found - a boolean that is true if there was a face found at the 128x128 image,
-            false if no faces were found
     '''
     fig, ax=plt.subplots(1, figsize=(10, 10))
     ax.grid(False)
@@ -65,6 +66,7 @@ def plot_original(img, scale_value, faces_endpoints, cropped_dims):
                                     linewidth = 1, edgecolor = "r", facecolor = "none")
                                     # alpha = detections[i, 16])
         ax.add_patch(rect)
+        get_landmarks(img, dlib.rectangle(int(xmin), int(ymin), int(xmax), int(ymax)), ax)
     plt.show()
 
 def crop_to_square(img, size):
@@ -118,6 +120,14 @@ def plot_detections(img, detections, with_keypoints=True):
     plt.show()
     return detected_faces_endpoints
 
+def get_landmarks(img, face, ax):
+    landmarks = PREDICTOR(img, face)
+    # dlib landmarks will extract 68 landmarks.
+    for landmark_idx in range(68):
+        x, y = landmarks.part(landmark_idx).x, landmarks.part(landmark_idx).y
+        lm_circle = patches.Circle((x, y), radius = 1, linewidth = 2, edgecolor = "lightskyblue", facecolor = "none")
+        ax.add_patch(lm_circle)
+
 def get_meta_from_json(path, json_file):
     df = pd.read_json(os.path.join(DATA_FOLDER, path, json_file))
     df = df.T
@@ -168,8 +178,8 @@ def main():
     print(gpu)
     
     net=BlazeFace().to(gpu)
-    net.load_weights("blazeface.pth")
-    net.load_anchors("anchors.npy")
+    net.load_weights("../input/blazeface.pth")
+    net.load_anchors("../input/anchors.npy")
 
     for video_file in fake_train_sample_video:
         get_frame_faces(os.path.join(
